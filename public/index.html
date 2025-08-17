@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>Suncity Plaza</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #223049; }
+    body { margin: 0; overflow: hidden; background: #000; }
     canvas { display: block; }
   </style>
 </head>
@@ -17,14 +17,21 @@
     const player = { x: 400, y: 300, size: 30, speed: 5 };
     const keys = {};
 
+    // Bild als Hintergrund laden
+    const bg = new Image();
+    bg.src = "background.png";   // liegt in /public
+
     addEventListener("keydown", e => keys[e.key] = true);
     addEventListener("keyup",   e => keys[e.key] = false);
 
     function draw() {
-      // Hintergrund + Brunnen
-      ctx.fillStyle = "#223049"; ctx.fillRect(0,0,c.width,c.height);
-      ctx.beginPath(); ctx.arc(400,300,88,0,Math.PI*2); ctx.strokeStyle="#94bfff"; ctx.lineWidth=6; ctx.stroke();
-      ctx.beginPath(); ctx.arc(400,300,60,0,Math.PI*2); ctx.fillStyle="#3a80ff"; ctx.fill();
+      // Hintergrund
+      if (bg.complete) {
+        ctx.drawImage(bg, 0, 0, c.width, c.height);
+      } else {
+        ctx.fillStyle = "#223049";
+        ctx.fillRect(0,0,c.width,c.height);
+      }
 
       // Spieler
       ctx.fillStyle = "#ff4444";
@@ -37,7 +44,7 @@
       if (keys["ArrowLeft"]||keys["a"]) player.x -= player.speed;
       if (keys["ArrowRight"]||keys["d"]) player.x += player.speed;
 
-      // Bounds
+      // Grenzen
       if (player.x<0) player.x=0;
       if (player.y<0) player.y=0;
       if (player.x+player.size>c.width)  player.x=c.width-player.size;
