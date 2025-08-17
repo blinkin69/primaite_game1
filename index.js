@@ -1,52 +1,54 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Suncity Plaza</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #223049; }
-    canvas { display: block; }
-  </style>
-</head>
-<body>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <script>
-    const c = document.getElementById("gameCanvas");
-    const ctx = c.getContext("2d");
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Telegraf } from "telegraf";
 
-    const player = { x: 400, y: 300, size: 30, speed: 5 };
-    const keys = {};
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-    addEventListener("keydown", e => keys[e.key] = true);
-    addEventListener("keyup",   e => keys[e.key] = false);
+// ===== ENV =====
+const BOT_TOKEN = process.env.BOT_TOKEN;                          // BotFather-Token
+const GAME_SHORT_NAME = process.env.GAME_SHORT_NAME || "suncity"; // /newgame Shortname
+const APP_URL = process.env.APP_URL;                              // z.B. https://<dein>.up.railway.app
+const GAME_URL = process.env.GAME_URL || `${APP_URL}/`;           // was im Telegram-Game aufgeht
 
-    function draw() {
-      // Hintergrund + Brunnen
-      ctx.fillStyle = "#223049"; ctx.fillRect(0,0,c.width,c.height);
-      ctx.beginPath(); ctx.arc(400,300,88,0,Math.PI*2); ctx.strokeStyle="#94bfff"; ctx.lineWidth=6; ctx.stroke();
-      ctx.beginPath(); ctx.arc(400,300,60,0,Math.PI*2); ctx.fillStyle="#3a80ff"; ctx.fill();
+if (!BOT_TOKEN) throw new Error("BOT_TOKEN missing");
+if (!APP_URL)   console.warn("APP_URL not set – trage deine Railway-URL als Env Var ein.");
 
-      // Spieler
-      ctx.fillStyle = "#ff4444";
-      ctx.fillRect(player.x, player.y, player.size, player.size);
+// ===== Telegram Bot =====
+const bot = new Telegraf(BOT_TOKEN);
+
+// /play -> Game-Card
+bot.command("play", (ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
+
+// Beim Klick auf „Play Game“ die URL liefern (ohne diese Antwort öffnet Telegram nichts)
+bot.on("callback_query", (ctx) => {
+  const q = ctx.callbackQuery;
+  if (q.game_short_name === GAME_SHORT_NAME) {
+    return ctx.answerCbQuery(undefined, { url: GAME_URL });
+  }
+  return ctx.answerCbQuery();
+});
+
+// ===== Webserver: hostet dein Game aus /public =====
+const app = express();
+app.use(express.static(path.join(__dirname, "public")));
+app.get("/health", (_req, res) => res.send("OK"));
+
+// ===== Webhook statt Polling (verhindert 409-Conflicts) =====
+const webhookPath = `/telegraf/${BOT_TOKEN}`;      // „geheime“ Route
+app.use(webhookPath, bot.webhookCallback(webhookPath));
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, async () => {
+  console.log("Web listening on", PORT);
+  if (APP_URL) {
+    const target = `${APP_URL}${webhookPath}`;
+    try {
+      await bot.telegram.setWebhook(target);
+      console.log("Webhook set to:", target);
+    } catch (e) {
+      console.error("Failed to set webhook:", e.message);
     }
-
-    function update() {
-      if (keys["ArrowUp"]||keys["w"]) player.y -= player.speed;
-      if (keys["ArrowDown"]||keys["s"]) player.y += player.speed;
-      if (keys["ArrowLeft"]||keys["a"]) player.x -= player.speed;
-      if (keys["ArrowRight"]||keys["d"]) player.x += player.speed;
-
-      // Bounds
-      if (player.x<0) player.x=0;
-      if (player.y<0) player.y=0;
-      if (player.x+player.size>c.width)  player.x=c.width-player.size;
-      if (player.y+player.size>c.height) player.y=c.height-player.size;
-    }
-
-    (function loop(){
-      update(); draw(); requestAnimationFrame(loop);
-    })();
-  </script>
-</body>
-</html>
+  }
+});
+// Wichtig: KEIN bot.launch() – wir nutzen Webhook!
