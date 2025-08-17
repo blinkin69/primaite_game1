@@ -1,11 +1,14 @@
 {
-  "name": "plaza-webapp",
+  "name": "telegram-game-bot",
   "version": "1.0.0",
+  "description": "Telegram Game Bot on Railway",
   "type": "module",
-  "dependencies": {
-    "express": "^4.19.2"
-  },
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "telegraf": "^4.16.3"
   }
 }
