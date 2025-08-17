@@ -1,66 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Suncity Plaza</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>SunCity Plaza</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    canvas { display: block; }
-    #hud {
-      position: fixed; left: 12px; top: 10px; z-index: 10;
-      font-family: system-ui, sans-serif; color: #fff; opacity:.85;
-      background: rgba(0,0,0,.25); padding: 6px 10px; border-radius: 8px;
-    }
+    html,body{margin:0;height:100%;background:#101418;overflow:hidden}
+    #ui{position:fixed;top:10px;left:10px;z-index:10;color:#fff;font-family:system-ui}
   </style>
 </head>
 <body>
-  <div id="hud">Move: WASD / Arrow Keys</div>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="ui">WASD/Pfeile oder Tippen • eigenes Bild: unten links</div>
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
   <script>
-    const c = document.getElementById("gameCanvas");
-    const ctx = c.getContext("2d");
+  const tg = window.Telegram?.WebApp; if (tg){ tg.ready(); tg.expand(); tg.BackButton.show(); tg.onEvent('backButtonClicked', ()=>tg.close()); }
+  const W=innerWidth, H=innerHeight, SPEED=220, TAP=240;
+  let player,cursors,wasd,target=null,avatarKey='avatarRaw';
 
-    // Optional: Hintergrundbild (lege 'public/background.png' ab)
-    const bg = new Image();
-    bg.src = "background.png"; // wenn nicht vorhanden, fallback auf Farbe
+  new Phaser.Game({
+    type: Phaser.AUTO, width: W, height: H, backgroundColor: '#101418',
+    physics:{ default:'arcade' }, scale:{ mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH },
+    scene:{ preload, create, update }
+  });
 
-    const player = { x: 400, y: 300, size: 30, speed: 5 };
-    const keys = {};
-    addEventListener("keydown", e => keys[e.key] = true);
-    addEventListener("keyup",   e => keys[e.key] = false);
+  function preload(){
+    this.textures.generate('avatarRaw',{data:[
+      '................','................','....33333333....','...3333333333...',
+      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
+      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
+      '...3333333333...','....33333333....','................','................'
+    ],pixelWidth:6,palette:{3:'#9aa7b1'}});
+  }
 
-    function update(){
-      if (keys["ArrowUp"]||keys["w"])    player.y -= player.speed;
-      if (keys["ArrowDown"]||keys["s"])  player.y += player.speed;
-      if (keys["ArrowLeft"]||keys["a"])  player.x -= player.speed;
-      if (keys["ArrowRight"]||keys["d"]) player.x += player.speed;
+  function create(){
+    const g=this.add.graphics(),pad=24,cx=W/2,cy=H/2;
+    g.fillStyle(0x1b2230,1).fillRect(0,0,W,H);
+    g.fillStyle(0x223049,1).fillRoundedRect(pad,pad,W-2*pad,H-2*pad,18);
+    g.fillStyle(0x94bfff,1).fillCircle(cx,cy,90);
+    g.fillStyle(0x3a80ff,1).fillCircle(cx,cy,70);
 
-      // Grenzen
-      if (player.x<0) player.x=0;
-      if (player.y<0) player.y=0;
-      if (player.x+player.size>c.width)  player.x=c.width-player.size;
-      if (player.y+player.size>c.height) player.y=c.height-player.size;
+    const maskG=this.make.graphics({x:0,y:0,add:false}); maskG.fillStyle(0xffffff).fillCircle(0,0,48);
+    const img=this.add.image(cx,cy+120,avatarKey).setDisplaySize(96,96);
+    img.setMask(new Phaser.Display.Masks.GeometryMask(this,maskG));
+    const frame=this.add.graphics(); frame.lineStyle(4,0x77d1ff,1).strokeCircle(img.x,img.y,50);
+
+    this.physics.add.existing(img); img.body.setCircle(48); img.body.setOffset(-48,-48);
+    this.physics.world.setBounds(pad,pad,W-2*pad,H-2*pad); img.body.setCollideWorldBounds(true); player=img;
+
+    cursors=this.input.keyboard.createCursorKeys();
+    wasd=this.input.keyboard.addKeys({up:'W',left:'A',down:'S',right:'D'});
+    this.input.on('pointerdown',p=>{ target=new Phaser.Math.Vector2(p.worldX,p.worldY);
+      const a=Phaser.Math.Angle.Between(player.x,player.y,target.x,target.y);
+      this.physics.velocityFromRotation(a,TAP,player.body.velocity); });
+
+    // Upload-Button (eigenes Bild)
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    Object.assign(input.style,{position:'fixed',left:'10px',bottom:'10px',zIndex:10,color:'#ddd'});
+    input.onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader();
+      r.onload=()=>{ const key='avatarUser'; this.textures.remove(key); this.textures.addBase64(key,r.result);
+        avatarKey=key; player.setTexture(key).setDisplaySize(96,96); }; r.readAsDataURL(f); };
+    document.body.appendChild(input);
+
+    if (tg?.initDataUnsafe?.user){
+      const u=tg.initDataUnsafe.user;
+      const label=`${u.first_name||''} ${u.last_name||''}`.trim() || (u.username?('@'+u.username):'Player');
+      this.add.text(12,H-28,label,{fontFamily:'system-ui',fontSize:'14px',color:'#ffffff88'});
     }
+  }
 
-    function draw(){
-      // Hintergrund
-      if (bg.complete && bg.naturalWidth) {
-        ctx.drawImage(bg, 0, 0, c.width, c.height);
-      } else {
-        ctx.fillStyle = "#223049";
-        ctx.fillRect(0,0,c.width,c.height);
-        // Deko-Brunnen, falls kein Bild
-        ctx.beginPath(); ctx.arc(400,300,88,0,Math.PI*2); ctx.strokeStyle="#94bfff"; ctx.lineWidth=6; ctx.stroke();
-        ctx.beginPath(); ctx.arc(400,300,60,0,Math.PI*2); ctx.fillStyle="#3a80ff"; ctx.fill();
-      }
-
-      // Spieler
-      ctx.fillStyle = "#ff4444";
-      ctx.fillRect(player.x, player.y, player.size, player.size);
-    }
-
-    (function loop(){ update(); draw(); requestAnimationFrame(loop); })();
+  function update(){
+    if(!player) return;
+    let vx=0,vy=0,k=cursors,w=wasd;
+    if(k.left.isDown||w.left.isDown)vx-=1; if(k.right.isDown||w.right.isDown)vx+=1;
+    if(k.up.isDown||w.up.isDown)vy-=1; if(k.down.isDown||w.down.isDown)vy+=1;
+    if(vx||vy){ target=null; const v=new Phaser.Math.Vector2(vx,vy).normalize().scale(SPEED); player.body.setVelocity(v.x,v.y); }
+    else if(target){ if(Phaser.Math.Distance.Between(player.x,player.y,target.x,target.y)<8){ player.body.setVelocity(0,0); target=null; } }
+    else { player.body.setVelocity(0,0); }
+  }
   </script>
 </body>
 </html>
