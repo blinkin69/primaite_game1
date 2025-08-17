@@ -14,34 +14,19 @@
     const c = document.getElementById("gameCanvas");
     const ctx = c.getContext("2d");
 
+    // Optional: Hintergrundbild (lege 'public/background.png' an)
+    const bg = new Image();
+    bg.src = "background.png"; // wenn nicht vorhanden, wird stattdessen Farbfläche gemalt
+
     const player = { x: 400, y: 300, size: 30, speed: 5 };
     const keys = {};
-
-    // Bild als Hintergrund laden
-    const bg = new Image();
-    bg.src = "background.png";   // liegt in /public
-
     addEventListener("keydown", e => keys[e.key] = true);
     addEventListener("keyup",   e => keys[e.key] = false);
 
-    function draw() {
-      // Hintergrund
-      if (bg.complete) {
-        ctx.drawImage(bg, 0, 0, c.width, c.height);
-      } else {
-        ctx.fillStyle = "#223049";
-        ctx.fillRect(0,0,c.width,c.height);
-      }
-
-      // Spieler
-      ctx.fillStyle = "#ff4444";
-      ctx.fillRect(player.x, player.y, player.size, player.size);
-    }
-
-    function update() {
-      if (keys["ArrowUp"]||keys["w"]) player.y -= player.speed;
-      if (keys["ArrowDown"]||keys["s"]) player.y += player.speed;
-      if (keys["ArrowLeft"]||keys["a"]) player.x -= player.speed;
+    function update(){
+      if (keys["ArrowUp"]||keys["w"])    player.y -= player.speed;
+      if (keys["ArrowDown"]||keys["s"])  player.y += player.speed;
+      if (keys["ArrowLeft"]||keys["a"])  player.x -= player.speed;
       if (keys["ArrowRight"]||keys["d"]) player.x += player.speed;
 
       // Grenzen
@@ -50,10 +35,19 @@
       if (player.x+player.size>c.width)  player.x=c.width-player.size;
       if (player.y+player.size>c.height) player.y=c.height-player.size;
     }
-
-    (function loop(){
-      update(); draw(); requestAnimationFrame(loop);
-    })();
+    function draw(){
+      // Hintergrund
+      if (bg.complete && bg.naturalWidth) {
+        ctx.drawImage(bg, 0, 0, c.width, c.height);
+      } else {
+        ctx.fillStyle = "#223049";
+        ctx.fillRect(0,0,c.width,c.height);
+      }
+      // Spieler
+      ctx.fillStyle = "#ff4444";
+      ctx.fillRect(player.x, player.y, player.size, player.size);
+    }
+    (function loop(){ update(); draw(); requestAnimationFrame(loop); })();
   </script>
 </body>
 </html>
