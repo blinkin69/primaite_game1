@@ -1,132 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
-  <title>SunCity Plaza</title>
+  <meta charset="UTF-8" />
+  <title>Plaza Game</title>
   <style>
-    html,body{margin:0;height:100%;background:#101418;overflow:hidden}
-    #ui{position:fixed;top:10px;left:10px;z-index:10;color:#fff;font-family:system-ui}
+    body { margin: 0; overflow: hidden; }
+    canvas { background: #d0f0ff; display: block; }
   </style>
 </head>
 <body>
-  <div id="ui">WASD/Pfeile oder Tippen • eigenes Bild: unten links</div>
-
-  <!-- Telegram WebApp SDK (funktioniert auch im normalen Browser) -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Phaser 3 -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
 
   <script>
-  const tg = window.Telegram?.WebApp;
-  if (tg){ tg.ready(); tg.expand(); tg.BackButton.show(); tg.onEvent('backButtonClicked', ()=>tg.close()); }
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-  const W = innerWidth, H = innerHeight;
-  const SPEED = 220, TAP_SPEED = 240;
-  let player, cursors, wasd, targetPoint = null, avatarKey='avatarRaw';
+    let player = { x: 400, y: 300, size: 30, speed: 5 };
 
-  const config = {
-    type: Phaser.AUTO,
-    width: W, height: H,
-    backgroundColor: '#101418',
-    physics: { default:'arcade', arcade:{ debug:false } },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: { preload, create, update }
-  };
-  const game = new Phaser.Game(config);
+    const keys = {};
 
-  // Keyboard-Fokus sichern
-  window.addEventListener('load', () => {
-    const c = game.canvas; if (c){ c.setAttribute('tabindex','0'); c.focus(); }
-  });
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
 
-  function preload(){
-    // Fallback-Avatar
-    this.textures.generate('avatarRaw',{data:[
-      '................','................','....33333333....','...3333333333...',
-      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
-      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
-      '...3333333333...','....33333333....','................','................'
-    ], pixelWidth:6, palette:{3:'#9aa7b1'}});
-  }
+    function drawPlaza() {
+      ctx.fillStyle = "#7cfc00"; // Wiese
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  function create(){
-    // Plaza
-    const g=this.add.graphics(), pad=24, cx=W/2, cy=H/2;
-    g.fillStyle(0x1b2230,1).fillRect(0,0,W,H);
-    g.fillStyle(0x223049,1).fillRoundedRect(pad,pad,W-2*pad,H-2*pad,18);
-    g.fillStyle(0x94bfff,1).fillCircle(cx,cy,90);
-    g.fillStyle(0x3a80ff,1).fillCircle(cx,cy,70);
+      // Brunnen
+      ctx.beginPath();
+      ctx.arc(400, 300, 60, 0, Math.PI * 2);
+      ctx.fillStyle = "#1e90ff";
+      ctx.fill();
 
-    // runder Avatar
-    const maskG=this.make.graphics({x:0,y:0,add:false}); maskG.fillStyle(0xffffff).fillCircle(0,0,48);
-    const img=this.add.image(cx,cy+120,avatarKey).setDisplaySize(96,96);
-    img.setMask(new Phaser.Display.Masks.GeometryMask(this, maskG));
-    this.add.graphics().lineStyle(4,0x77d1ff,1).strokeCircle(img.x,img.y,50);
-
-    // Physik + Bounds
-    this.physics.add.existing(img);
-    img.body.setCircle(48); img.body.setOffset(-48,-48);
-    this.physics.world.setBounds(pad,pad,W-2*pad,H-2*pad);
-    img.body.setCollideWorldBounds(true);
-    player = img;
-
-    // Steuerung
-    cursors = this.input.keyboard.createCursorKeys();
-    wasd = this.input.keyboard.addKeys({up:'W',left:'A',down:'S',right:'D'});
-
-    // Tap-to-move: Ziel setzen, Bewegung in update()
-    this.input.on('pointerdown', p => {
-      targetPoint = new Phaser.Math.Vector2(p.worldX, p.worldY);
-    });
-
-    // Bild-Upload (Avatar)
-    const input=document.createElement('input');
-    input.type='file'; input.accept='image/*';
-    Object.assign(input.style,{position:'fixed',left:'10px',bottom:'10px',zIndex:10,color:'#ddd'});
-    input.onchange=(e)=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader();
-      r.onload=()=>{ const key='avatarUser'; this.textures.remove(key); this.textures.addBase64(key, r.result);
-        avatarKey=key; player.setTexture(key).setDisplaySize(96,96); };
-      r.readAsDataURL(f);
-    };
-    document.body.appendChild(input);
-
-    // (Optional) Telegram-Name einblenden
-    if (tg?.initDataUnsafe?.user){
-      const u=tg.initDataUnsafe.user;
-      const label=`${u.first_name||''} ${u.last_name||''}`.trim() || (u.username?('@'+u.username):'Player');
-      this.add.text(12,H-28,label,{fontFamily:'system-ui',fontSize:'14px',color:'#ffffff88'});
-    }
-  }
-
-  function update(){
-    if (!player) return;
-
-    // Keyboard
-    let vx=0, vy=0;
-    const k=cursors, w=wasd;
-    if (k.left.isDown||w.left.isDown) vx-=1;
-    if (k.right.isDown||w.right.isDown) vx+=1;
-    if (k.up.isDown||w.up.isDown) vy-=1;
-    if (k.down.isDown||w.down.isDown) vy+=1;
-
-    if (vx||vy){
-      targetPoint=null;
-      const v=new Phaser.Math.Vector2(vx,vy).normalize().scale(SPEED);
-      player.body.setVelocity(v.x,v.y);
-      return;
+      // Spieler
+      ctx.fillStyle = "red";
+      ctx.fillRect(player.x, player.y, player.size, player.size);
     }
 
-    // Tap-to-move
-    if (targetPoint){
-      const dx=targetPoint.x-player.x, dy=targetPoint.y-player.y;
-      const d=Math.hypot(dx,dy);
-      if (d<8){ player.body.setVelocity(0,0); targetPoint=null; }
-      else { player.body.setVelocity((dx/d)*TAP_SPEED, (dy/d)*TAP_SPEED); }
-    } else {
-      player.body.setVelocity(0,0);
+    function update() {
+      if (keys["ArrowUp"] || keys["w"]) player.y -= player.speed;
+      if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
+      if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
+      if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
     }
-  }
+
+    function gameLoop() {
+      update();
+      drawPlaza();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
   </script>
 </body>
 </html>
