@@ -6,17 +6,24 @@
   <style>
     body { margin: 0; overflow: hidden; background: #000; }
     canvas { display: block; }
+    #hud {
+      position: fixed; left: 12px; top: 10px; z-index: 10;
+      font-family: system-ui, sans-serif; color: #fff; opacity:.85;
+      background: rgba(0,0,0,.25); padding: 6px 10px; border-radius: 8px;
+    }
   </style>
 </head>
 <body>
+  <div id="hud">Move: WASD / Arrow Keys</div>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
+
   <script>
     const c = document.getElementById("gameCanvas");
     const ctx = c.getContext("2d");
 
-    // Optional: Hintergrundbild (lege 'public/background.png' an)
+    // Optional: Hintergrundbild (lege 'public/background.png' ab)
     const bg = new Image();
-    bg.src = "background.png"; // wenn nicht vorhanden, wird stattdessen Farbfläche gemalt
+    bg.src = "background.png"; // wenn nicht vorhanden, fallback auf Farbe
 
     const player = { x: 400, y: 300, size: 30, speed: 5 };
     const keys = {};
@@ -35,6 +42,7 @@
       if (player.x+player.size>c.width)  player.x=c.width-player.size;
       if (player.y+player.size>c.height) player.y=c.height-player.size;
     }
+
     function draw(){
       // Hintergrund
       if (bg.complete && bg.naturalWidth) {
@@ -42,11 +50,16 @@
       } else {
         ctx.fillStyle = "#223049";
         ctx.fillRect(0,0,c.width,c.height);
+        // Deko-Brunnen, falls kein Bild
+        ctx.beginPath(); ctx.arc(400,300,88,0,Math.PI*2); ctx.strokeStyle="#94bfff"; ctx.lineWidth=6; ctx.stroke();
+        ctx.beginPath(); ctx.arc(400,300,60,0,Math.PI*2); ctx.fillStyle="#3a80ff"; ctx.fill();
       }
+
       // Spieler
       ctx.fillStyle = "#ff4444";
       ctx.fillRect(player.x, player.y, player.size, player.size);
     }
+
     (function loop(){ update(); draw(); requestAnimationFrame(loop); })();
   </script>
 </body>
