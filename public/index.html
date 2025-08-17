@@ -1,45 +1,84 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Plaza WebApp</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>SunCity Plaza</title>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
+    html,body{margin:0;height:100%;background:#101418;overflow:hidden}
+    #ui{position:fixed;top:10px;left:10px;z-index:10;color:#fff;font-family:system-ui}
   </style>
 </head>
 <body>
-<script>
-const config = {
-  type: Phaser.AUTO,
-  width: window.innerWidth,
-  height: window.innerHeight,
-  backgroundColor: '#87ceeb',
-  physics: { default: 'arcade' },
-  scene: { preload, create, update }
-};
-let player, cursors;
+  <div id="ui">WASD/Pfeile oder Tippen • eigenes Bild: unten links</div>
 
-function preload() {
-  this.load.image('avatar', 'https://i.imgur.com/2yaf2wb.png'); // Dummy Avatar
-}
-function create() {
-  player = this.physics.add.sprite(config.width/2, config.height/2, 'avatar').setScale(0.3);
-  cursors = this.input.keyboard.createCursorKeys();
-  this.input.on('pointerdown', p => {
-    this.physics.moveTo(player, p.x, p.y, 200);
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+  <script>
+  const tg = window.Telegram?.WebApp; if (tg){ tg.ready(); tg.expand(); tg.BackButton.show(); tg.onEvent('backButtonClicked', ()=>tg.close()); }
+  const W=innerWidth, H=innerHeight, SPEED=220, TAP=240;
+  let player,cursors,wasd,target=null,avatarKey='avatarRaw';
+
+  new Phaser.Game({
+    type: Phaser.AUTO, width: W, height: H, backgroundColor: '#101418',
+    physics:{ default:'arcade' }, scale:{ mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH },
+    scene:{ preload, create, update }
   });
-}
-function update() {
-  player.setVelocity(0);
-  if (cursors.left.isDown) player.setVelocityX(-200);
-  if (cursors.right.isDown) player.setVelocityX(200);
-  if (cursors.up.isDown) player.setVelocityY(-200);
-  if (cursors.down.isDown) player.setVelocityY(200);
-}
-new Phaser.Game(config);
-</script>
+
+  function preload(){
+    this.textures.generate('avatarRaw',{data:[
+      '................','................','....33333333....','...3333333333...',
+      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
+      '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
+      '...3333333333...','....33333333....','................','................'
+    ],pixelWidth:6,palette:{3:'#9aa7b1'}});
+  }
+
+  function create(){
+    const g=this.add.graphics(),pad=24,cx=W/2,cy=H/2;
+    g.fillStyle(0x1b2230,1).fillRect(0,0,W,H);
+    g.fillStyle(0x223049,1).fillRoundedRect(pad,pad,W-2*pad,H-2*pad,18);
+    g.fillStyle(0x94bfff,1).fillCircle(cx,cy,90);
+    g.fillStyle(0x3a80ff,1).fillCircle(cx,cy,70);
+
+    const maskG=this.make.graphics({x:0,y:0,add:false}); maskG.fillStyle(0xffffff).fillCircle(0,0,48);
+    const img=this.add.image(cx,cy+120,avatarKey).setDisplaySize(96,96);
+    img.setMask(new Phaser.Display.Masks.GeometryMask(this,maskG));
+    const frame=this.add.graphics(); frame.lineStyle(4,0x77d1ff,1).strokeCircle(img.x,img.y,50);
+
+    this.physics.add.existing(img); img.body.setCircle(48); img.body.setOffset(-48,-48);
+    this.physics.world.setBounds(pad,pad,W-2*pad,H-2*pad); img.body.setCollideWorldBounds(true); player=img;
+
+    cursors=this.input.keyboard.createCursorKeys();
+    wasd=this.input.keyboard.addKeys({up:'W',left:'A',down:'S',right:'D'});
+    this.input.on('pointerdown',p=>{ target=new Phaser.Math.Vector2(p.worldX,p.worldY);
+      const a=Phaser.Math.Angle.Between(player.x,player.y,target.x,target.y);
+      this.physics.velocityFromRotation(a,TAP,player.body.velocity); });
+
+    // Upload-Button (eigenes Bild)
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    Object.assign(input.style,{position:'fixed',left:'10px',bottom:'10px',zIndex:10,color:'#ddd'});
+    input.onchange=(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader();
+      r.onload=()=>{ const key='avatarUser'; this.textures.remove(key); this.textures.addBase64(key,r.result);
+        avatarKey=key; player.setTexture(key).setDisplaySize(96,96); }; r.readAsDataURL(f); };
+    document.body.appendChild(input);
+
+    if (tg?.initDataUnsafe?.user){
+      const u=tg.initDataUnsafe.user;
+      const label=`${u.first_name||''} ${u.last_name||''}`.trim() || (u.username?('@'+u.username):'Player');
+      this.add.text(12,H-28,label,{fontFamily:'system-ui',fontSize:'14px',color:'#ffffff88'});
+    }
+  }
+
+  function update(){
+    if(!player) return;
+    let vx=0,vy=0,k=cursors,w=wasd;
+    if(k.left.isDown||w.left.isDown)vx-=1; if(k.right.isDown||w.right.isDown)vx+=1;
+    if(k.up.isDown||w.up.isDown)vy-=1; if(k.down.isDown||w.down.isDown)vy+=1;
+    if(vx||vy){ target=null; const v=new Phaser.Math.Vector2(vx,vy).normalize().scale(SPEED); player.body.setVelocity(v.x,v.y); }
+    else if(target){ if(Phaser.Math.Distance.Between(player.x,player.y,target.x,target.y)<8){ player.body.setVelocity(0,0); target=null; } }
+    else { player.body.setVelocity(0,0); }
+  }
+  </script>
 </body>
 </html>
