@@ -1,83 +1,65 @@
-const express = require("express");
-const path = require("path");
-const { Telegraf } = require("telegraf");
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Telegraf } from "telegraf";
 
-// ===== ENV =====
-const BOT_TOKEN = process.env.BOT_TOKEN;                    // BotFather Token
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ---- ENV ----
+const BOT_TOKEN = process.env.BOT_TOKEN;                   // BotFather Token
 const GAME_SHORT_NAME = process.env.GAME_SHORT_NAME || "suncity";
-const APP_URL = process.env.APP_URL;                        // z.B. https://<dein>.up.railway.app
-const GAME_URL = process.env.GAME_URL || (APP_URL ? `${APP_URL}/` : undefined);
+const APP_URL = process.env.APP_URL;                       // z.B. https://<dein>.up.railway.app
+const GAME_URL = `${APP_URL}/`;                            // immer deine Railway-URL
+const USE_POLLING = process.env.USE_POLLING === "true";    // optional: Polling erzwingen
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN missing");
-if (!APP_URL) console.warn("APP_URL not set – setze deine Railway-URL in den Variables, z. B. https://<app>.up.railway.app");
+if (!APP_URL)   console.warn("APP_URL not set – setze deine Railway-URL in Variables.");
 
-// ===== Telegram Bot =====
+// ---- Telegram Bot ----
 const bot = new Telegraf(BOT_TOKEN);
 
-// Globales Logging (hilft beim Debuggen)
-bot.use(async (ctx, next) => {
-  try {
-    console.log("update:", JSON.stringify(ctx.update));
-  } catch {}
-  return next();
-});
-bot.catch((err) => console.error("BOT ERROR:", err));
+// /play zeigt die Game-Card (oder nutze Inline: @deinbot suncity)
+bot.command("play", (ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
 
-// /ping → schneller Test ob der Webhook Updates liefert
+// Klick auf „Play Game“ -> öffne deine WebApp-URL (Railway)
+bot.on("callback_query", (ctx) => {
+  const q = ctx.callbackQuery;
+  if (q?.game_short_name === GAME_SHORT_NAME) {
+    return ctx.answerCbQuery(undefined, { url: GAME_URL });
+  }
+  return ctx.answerCbQuery();
+});
+
+// (optional nützlich) minimale Tests
+bot.command("start", (ctx) => ctx.reply("Welcome to SunCity 🌞 Type /play"));
 bot.command("ping", (ctx) => ctx.reply("pong ✅"));
 
-// /open → öffnet deine Seite über WebApp-Button (Bypass des Game-Flows)
-bot.command("open", (ctx) => {
-  const url = GAME_URL || `${APP_URL}/`;
-  return ctx.reply("Open WebApp:", {
-    reply_markup: {
-      inline_keyboard: [[ { text: "Open", web_app: { url } } ]]
-    }
-  });
-});
-
-// /play → zeigt die Game-Card (Shortname muss zu deinem /newgame passen)
-bot.command("play", async (ctx) => {
-  try {
-    await ctx.replyWithGame(GAME_SHORT_NAME);
-  } catch (e) {
-    console.error("replyWithGame error:", e);
-    await ctx.reply("❌ Game short name unknown. Check GAME_SHORT_NAME and BotFather /newgame.");
-  }
-});
-
-// „Play Game“ geklickt → IMMER URL öffnen (zum Debuggen)
-bot.on("callback_query", async (ctx) => {
-  try {
-    console.log("callback_query:", JSON.stringify(ctx.callbackQuery));
-    const url = GAME_URL || `${APP_URL}/`;
-    await ctx.answerCbQuery(undefined, { url });
-  } catch (e) {
-    console.error("answerCbQuery error:", e);
-  }
-});
-
-// ===== Express hostet dein Spiel (./public) =====
+// ---- Webserver: hostet dein Spiel unter / (public/index.html) ----
 const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/health", (_req, res) => res.send("OK"));
 
-// ===== Webhook statt Polling (verhindert 409-Conflicts) =====
-const webhookPath = `/telegraf/${BOT_TOKEN}`; // „geheime“ Route
-app.use(webhookPath, bot.webhookCallback(webhookPath));
-
+// ---- Start (Webhook als Default; Polling optional) ----
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, async () => {
-  console.log("Web listening on", PORT);
-  if (APP_URL) {
-    const target = `${APP_URL}${webhookPath}`;
+
+if (USE_POLLING) {
+  // ⚠️ Nur EINE Instanz betreiben, sonst 409-Conflict
+  app.listen(PORT, () => console.log("Web listening on", PORT));
+  bot.launch().then(() => console.log("Bot launched (polling)"));
+} else {
+  // Webhook (empfohlen, kein 409)
+  const webhookPath = `/telegraf/${BOT_TOKEN}`;
+  app.use(webhookPath, bot.webhookCallback(webhookPath));
+  app.listen(PORT, async () => {
+    console.log("Web listening on", PORT);
     try {
-      const ok = await bot.telegram.setWebhook(target);
-      console.log("Webhook set:", ok, "→", target);
+      const target = `${APP_URL}${webhookPath}`;
+      await bot.telegram.setWebhook(target);
+      console.log("Webhook set:", true, "→", target);
     } catch (e) {
       console.error("Failed to set webhook:", e.message);
     }
-  }
-});
+  });
+}
 
-// Hinweis: KEIN bot.launch() – wir nutzen Webhook!
+// Hinweis: bei Webhook KEIN bot.launch() aufrufen.
