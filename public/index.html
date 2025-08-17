@@ -12,136 +12,117 @@
 <body>
   <div id="ui">WASD/Pfeile oder Tippen • eigenes Bild: unten links</div>
 
-  <!-- Telegram WebApp SDK -->
+  <!-- Telegram WebApp SDK (funktioniert auch im normalen Browser) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <!-- Phaser 3 -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 
   <script>
-  // Telegram WebApp Setup
   const tg = window.Telegram?.WebApp;
   if (tg){ tg.ready(); tg.expand(); tg.BackButton.show(); tg.onEvent('backButtonClicked', ()=>tg.close()); }
 
-  // Canvas-/Spiel-Parameter
-  const W = window.innerWidth, H = window.innerHeight;
+  const W = innerWidth, H = innerHeight;
   const SPEED = 220, TAP_SPEED = 240;
-
-  let player, cursors, wasd, targetPoint = null, avatarKey = 'avatarRaw';
+  let player, cursors, wasd, targetPoint = null, avatarKey='avatarRaw';
 
   const config = {
     type: Phaser.AUTO,
     width: W, height: H,
     backgroundColor: '#101418',
-    physics: { default: 'arcade', arcade: { debug: false } },
+    physics: { default:'arcade', arcade:{ debug:false } },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     scene: { preload, create, update }
   };
-
   const game = new Phaser.Game(config);
 
-  // WICHTIG: Canvas fokussieren, damit WASD/Pfeile sicher ankommen
+  // Keyboard-Fokus sichern
   window.addEventListener('load', () => {
-    const c = game.canvas;
-    if (c) { c.setAttribute('tabindex','0'); c.focus(); }
+    const c = game.canvas; if (c){ c.setAttribute('tabindex','0'); c.focus(); }
   });
 
   function preload(){
-    // Fallback-Avatar (Pixel-Pattern)
+    // Fallback-Avatar
     this.textures.generate('avatarRaw',{data:[
       '................','................','....33333333....','...3333333333...',
       '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
       '..333333333333..','..333333333333..','..333333333333..','..333333333333..',
       '...3333333333...','....33333333....','................','................'
-    ], pixelWidth: 6, palette: { 3:'#9aa7b1' }});
+    ], pixelWidth:6, palette:{3:'#9aa7b1'}});
   }
 
   function create(){
-    // Hintergrund & Plaza
-    const g = this.add.graphics(), pad = 24, cx = W/2, cy = H/2;
+    // Plaza
+    const g=this.add.graphics(), pad=24, cx=W/2, cy=H/2;
     g.fillStyle(0x1b2230,1).fillRect(0,0,W,H);
     g.fillStyle(0x223049,1).fillRoundedRect(pad,pad,W-2*pad,H-2*pad,18);
     g.fillStyle(0x94bfff,1).fillCircle(cx,cy,90);
     g.fillStyle(0x3a80ff,1).fillCircle(cx,cy,70);
 
-    // Avatar (rund maskiert)
-    const maskG = this.make.graphics({x:0,y:0,add:false});
-    maskG.fillStyle(0xffffff).fillCircle(0,0,48);
-    const img = this.add.image(cx, cy+120, avatarKey).setDisplaySize(96,96);
+    // runder Avatar
+    const maskG=this.make.graphics({x:0,y:0,add:false}); maskG.fillStyle(0xffffff).fillCircle(0,0,48);
+    const img=this.add.image(cx,cy+120,avatarKey).setDisplaySize(96,96);
     img.setMask(new Phaser.Display.Masks.GeometryMask(this, maskG));
-    const frame = this.add.graphics(); frame.lineStyle(4,0x77d1ff,1).strokeCircle(img.x,img.y,50);
+    this.add.graphics().lineStyle(4,0x77d1ff,1).strokeCircle(img.x,img.y,50);
 
-    // Physik
+    // Physik + Bounds
     this.physics.add.existing(img);
-    img.body.setCircle(48);           // runder Body
-    img.body.setOffset(-48,-48);      // zentrieren
-    this.physics.world.setBounds(pad,pad, W-2*pad, H-2*pad);
+    img.body.setCircle(48); img.body.setOffset(-48,-48);
+    this.physics.world.setBounds(pad,pad,W-2*pad,H-2*pad);
     img.body.setCollideWorldBounds(true);
     player = img;
 
     // Steuerung
     cursors = this.input.keyboard.createCursorKeys();
-    wasd = this.input.keyboard.addKeys({ up:'W', left:'A', down:'S', right:'D' });
+    wasd = this.input.keyboard.addKeys({up:'W',left:'A',down:'S',right:'D'});
 
-    // Tap-to-move: Setze nur das Ziel – Bewegung passiert pro Frame in update()
-    this.input.on('pointerdown', (p)=>{
+    // Tap-to-move: Ziel setzen, Bewegung in update()
+    this.input.on('pointerdown', p => {
       targetPoint = new Phaser.Math.Vector2(p.worldX, p.worldY);
     });
 
-    // Upload-Button (eigenes Bild) — NICHT auf die Canvas legen
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    // Bild-Upload (Avatar)
+    const input=document.createElement('input');
+    input.type='file'; input.accept='image/*';
     Object.assign(input.style,{position:'fixed',left:'10px',bottom:'10px',zIndex:10,color:'#ddd'});
-    input.onchange = (e)=>{
-      const f = e.target.files?.[0]; if(!f) return;
-      const r = new FileReader();
-      r.onload = ()=>{
-        const key='avatarUser';
-        this.textures.remove(key);
-        this.textures.addBase64(key, r.result);
-        avatarKey = key; player.setTexture(key).setDisplaySize(96,96);
-      };
+    input.onchange=(e)=>{const f=e.target.files?.[0]; if(!f) return; const r=new FileReader();
+      r.onload=()=>{ const key='avatarUser'; this.textures.remove(key); this.textures.addBase64(key, r.result);
+        avatarKey=key; player.setTexture(key).setDisplaySize(96,96); };
       r.readAsDataURL(f);
     };
     document.body.appendChild(input);
 
-    // Namenslabel (aus Telegram)
+    // (Optional) Telegram-Name einblenden
     if (tg?.initDataUnsafe?.user){
-      const u = tg.initDataUnsafe.user;
-      const label = `${u.first_name||''} ${u.last_name||''}`.trim() || (u.username?('@'+u.username):'Player');
-      this.add.text(12, H-28, label, { fontFamily:'system-ui', fontSize:'14px', color:'#ffffff88' });
+      const u=tg.initDataUnsafe.user;
+      const label=`${u.first_name||''} ${u.last_name||''}`.trim() || (u.username?('@'+u.username):'Player');
+      this.add.text(12,H-28,label,{fontFamily:'system-ui',fontSize:'14px',color:'#ffffff88'});
     }
   }
 
   function update(){
     if (!player) return;
 
-    // Tastaturbewegung
+    // Keyboard
     let vx=0, vy=0;
-    const k = cursors, w = wasd;
-    if (k.left.isDown || w.left.isDown)  vx -= 1;
-    if (k.right.isDown|| w.right.isDown) vx += 1;
-    if (k.up.isDown   || w.up.isDown)    vy -= 1;
-    if (k.down.isDown || w.down.isDown)  vy += 1;
+    const k=cursors, w=wasd;
+    if (k.left.isDown||w.left.isDown) vx-=1;
+    if (k.right.isDown||w.right.isDown) vx+=1;
+    if (k.up.isDown||w.up.isDown) vy-=1;
+    if (k.down.isDown||w.down.isDown) vy+=1;
 
-    if (vx !== 0 || vy !== 0){
-      // Keyboard hat Vorrang -> Tap-Ziel verwerfen
-      targetPoint = null;
-      const v = new Phaser.Math.Vector2(vx,vy).normalize().scale(SPEED);
-      player.body.setVelocity(v.x, v.y);
+    if (vx||vy){
+      targetPoint=null;
+      const v=new Phaser.Math.Vector2(vx,vy).normalize().scale(SPEED);
+      player.body.setVelocity(v.x,v.y);
       return;
     }
 
-    // Tap-to-move: Richtung JEDEN Frame neu berechnen (robust im WebView)
+    // Tap-to-move
     if (targetPoint){
-      const dx = targetPoint.x - player.x;
-      const dy = targetPoint.y - player.y;
-      const d  = Math.hypot(dx, dy);
-      if (d < 8){
-        player.body.setVelocity(0,0);
-        targetPoint = null;
-      } else {
-        player.body.setVelocity((dx/d)*TAP_SPEED, (dy/d)*TAP_SPEED);
-      }
+      const dx=targetPoint.x-player.x, dy=targetPoint.y-player.y;
+      const d=Math.hypot(dx,dy);
+      if (d<8){ player.body.setVelocity(0,0); targetPoint=null; }
+      else { player.body.setVelocity((dx/d)*TAP_SPEED, (dy/d)*TAP_SPEED); }
     } else {
       player.body.setVelocity(0,0);
     }
